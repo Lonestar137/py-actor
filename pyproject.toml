@@ -1,0 +1,24 @@
+[project]
+name = "py_actor"
+version = "0.1.0"
+description = "Python actor example"
+
+# repository = "..."
+
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["build", "polars", "esper"]
+
+
+[project.optional-dependencies]
+# dev = [""]
+test = ["pytest"]
+
+[build-system]
+# Defaults
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project.scripts]
+zzz = 'py_actor.main:main'
+ecs = 'py_actor.ecs:main'
