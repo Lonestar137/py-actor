@@ -7,7 +7,7 @@ description = "Python actor example"
 
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = ["build", "polars", "esper"]
+dependencies = ["build", "polars", "esper", "xoscar"]
 
 
 [project.optional-dependencies]
@@ -22,3 +22,5 @@ build-backend = "setuptools.build_meta"
 [project.scripts]
 zzz = 'py_actor.main:main'
 ecs = 'py_actor.ecs:main'
+xoserver = 'py_actor.server:main'
+xoclient = 'py_actor.client:main'
