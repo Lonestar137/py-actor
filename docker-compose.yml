@@ -1,0 +1,36 @@
+version: '3'
+services:
+  actor1:
+    image: docker.io/python:3.12
+    command: tail -F /dev/null
+    working_dir: /root/py-actor
+    volumes:
+      - ../py-actor:/root/py-actor:z
+      - user_cache:/root/.cache
+    networks:
+      - front-tier
+
+  actor2:
+    image: docker.io/python:3.12
+    command: tail -F /dev/null
+    working_dir: /root/py-actor
+    volumes:
+      - ../py-actor:/root/py-actor:z
+      - user_cache:/root/.cache
+    networks:
+      - front-tier
+
+  actor3:
+    image: docker.io/python:3.12
+    command: tail -F /dev/null
+    working_dir: /root/py-actor
+    volumes:
+      - ../py-actor:/root/py-actor:z
+      - user_cache:/root/.cache
+    networks:
+      - front-tier
+      
+volumes:
+  user_cache:
+networks:
+  front-tier:
