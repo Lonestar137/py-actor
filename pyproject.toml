@@ -7,7 +7,7 @@ description = "Python actor example"
 
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = ["build", "polars", "esper", "xoscar", "psutil"]
+dependencies = ["build", "xoscar", "psutil", "prometheus_client"]
 
 
 [project.optional-dependencies]

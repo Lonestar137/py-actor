@@ -29,8 +29,51 @@ services:
       - user_cache:/root/.cache
     networks:
       - front-tier
-      
+
+  # localhost:9090/targets for scrape debugging.
+  prometheus:
+    image: docker.io/prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      # target should be the :15692/metrics rabbit port and uri
+      - ./integration/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"     # Prometheus web UI
+    networks:
+      - front-tier
+
+  prometheus-gateway:
+    image: docker.io/prom/pushgateway:latest
+    container_name: prometheus_gateway
+    ports:
+      - "9091:9091"     # Prometheus push gateway
+    networks:
+      - front-tier
+
+  grafana:
+    image: docker.io/grafana/grafana:latest
+    container_name: grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3000:3000"     # Grafana web UI
+    networks:
+      - front-tier
+    depends_on:
+      - prometheus
+
+  # netshoot:
+  #   image: docker.io/nicolaka/netshoot:latest
+  #   command: tail -F /dev/null
+  #   container_name: netshoot
+  #   networks:
+  #     - front-tier
+
 volumes:
+  grafana-data:
   user_cache:
 networks:
   front-tier:
