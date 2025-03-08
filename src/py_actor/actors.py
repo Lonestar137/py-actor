@@ -1,6 +1,8 @@
+import time
 import xoscar
 import psutil
-import time
+import asyncio
+import argparse
 from xoscar import Actor, create_actor_pool
 from typing import Dict, Any, Optional
 from prometheus_client import CollectorRegistry, Gauge, push_to_gateway
@@ -106,48 +108,95 @@ class TelemetryActor(Actor):
                 time.sleep(interval)
 
 
-async def main():
+async def loop(args):
+    service_host_interface = f"{args.ip_address}:{args.port}"
     # Create actor pool
     async with await create_actor_pool(address="localhost:9777",
                                        n_process=1) as pool:
-        # Create secondary master (optional)
-        secondary_master_ref = await xoscar.create_actor(
-            MasterActor,
-            address="localhost:9777",
-            uid="secondary_master_actor")
+        if args.is_master:
+            # Create secondary master (optional)
+            secondary_master_ref = await xoscar.create_actor(
+                MasterActor,
+                address=service_host_interface,
+                uid="secondary_master_actor")
 
-        # Create primary master with Prometheus pushgateway and secondary master reference
-        master_ref = await xoscar.create_actor(
-            MasterActor,
-            prometheus_pushgateway=
-            "prometheus_gateway:9091",  # Set to None if not using Prometheus
-            secondary_master_ref=secondary_master_ref,
-            address="localhost:9777",
-            uid="master_actor")
+        # # Create primary master with Prometheus pushgateway and secondary master reference
+        # master_ref = await xoscar.create_actor(
+        #     MasterActor,
+        #     prometheus_pushgateway=
+        #     "prometheus_gateway:9091",  # Set to None if not using Prometheus
+        #     secondary_master_ref=secondary_master_ref,
+        #     address="localhost:9777",
+        #     uid="master_actor")
 
-        # Create multiple telemetry workers
-        num_workers = 3
-        worker_refs = []
-        for _ in range(num_workers):
-            worker_ref = await xoscar.create_actor(TelemetryActor,
-                                                   master_ref,
-                                                   address="localhost:9777")
-            worker_refs.append(worker_ref)
+        if args.has_telemetry:
+            # Create multiple telemetry workers
+            num_workers = 1
+            worker_refs = []
+            for _ in range(num_workers):
+                worker_ref = await xoscar.create_actor(
+                    TelemetryActor,
+                    secondary_master_ref,
+                    address=service_host_interface)
+                worker_refs.append(worker_ref)
 
-        # Start telemetry collection in each worker
-        for worker_ref in worker_refs:
-            await worker_ref.run(interval=5.0)
+            # Start telemetry collection in each worker
+            for worker_ref in worker_refs:
+                await worker_ref.run(interval=5.0)
 
-        # Keep main running to observe results
-        try:
-            while True:
-                all_data = await master_ref.get_all_telemetry()
-                print("\nCurrent telemetry snapshot:", all_data)
-                time.sleep(interval)
-        except KeyboardInterrupt:
-            print("\nShutting down...")
+        # # Keep main running to observe results
+        while True:
+            # all_data = await master_ref.get_all_telemetry()
+            # print("\nCurrent telemetry snapshot:", all_data)
+            time.sleep(interval)
+
+
+class MastersAction(argparse.Action):
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        if not (namespace.is_master or namespace.has_telemetry):
+            parser.error(
+                "--masters requires either --is-master or --has-telemetry to be set"
+            )
+        setattr(namespace, self.dest, values)
+
+
+def main():
+
+    parser = argparse.ArgumentParser()
+
+    # Create a mutually exclusive group for --is-master and --has-telemetry
+    # role_group = parser.add_mutually_exclusive_group()
+    role_group = parser
+    role_group.add_argument("--is-master",
+                            action="store_true",
+                            help="If set, spawns a master actor here.")
+    role_group.add_argument("--has-telemetry",
+                            action="store_true",
+                            help="If set, spawns a telemetry actor here.")
+    role_group.add_argument("-i",
+                            "--ip-address",
+                            default="localhost",
+                            help="IP Address for the service to listen on.")
+    role_group.add_argument("-p",
+                            "--port",
+                            default="9777",
+                            help="Port for the service to listen on.")
+
+    # Add the --masters argument with the custom action
+    parser.add_argument("-m",
+                        "--masters",
+                        nargs="+",
+                        action=MastersAction,
+                        help="List of masters to report to.")
+
+    args = parser.parse_args()
+
+    try:
+        asyncio.run(loop(args))
+    except KeyboardInterrupt:
+        print("\nShutting down...")
 
 
 if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
+    main()

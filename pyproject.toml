@@ -22,5 +22,6 @@ build-backend = "setuptools.build_meta"
 [project.scripts]
 zzz = 'py_actor.main:main'
 ecs = 'py_actor.ecs:main'
+xoactors = 'py_actor.actors:main'
 xoserver = 'py_actor.server:main'
 xoclient = 'py_actor.client:main'
