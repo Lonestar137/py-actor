@@ -3,7 +3,7 @@ import xoscar
 import psutil
 import asyncio
 import argparse
-from xoscar import Actor, create_actor_pool
+from xoscar import Actor, ActorRef, create_actor_pool
 from typing import Dict, Any, Optional
 from prometheus_client import CollectorRegistry, Gauge, push_to_gateway
 
@@ -78,8 +78,8 @@ class MasterActor(Actor):
 
 class TelemetryActor(Actor):
 
-    def __init__(self, master_ref):
-        self.master_ref = master_ref
+    def __init__(self, master_refs: list[ActorRef]):
+        self.master_refs = master_refs
         self.worker_id = f"worker_{id(self)}"
 
     async def collect_telemetry(self) -> Dict[str, Any]:
@@ -99,9 +99,10 @@ class TelemetryActor(Actor):
         while True:
             try:
                 data = await self.collect_telemetry()
-                response = await self.master_ref.receive_telemetry(
-                    self.worker_id, data)
-                print(f"Worker {self.worker_id} got response: {response}")
+                for master_ref in self.master_refs:
+                    response = await master_ref.receive_telemetry(
+                        self.worker_id, data)
+                    print(f"Worker {self.worker_id} got response: {response}")
                 time.sleep(interval)
             except Exception as e:
                 print(f"Error in worker {self.worker_id}: {str(e)}")
@@ -110,45 +111,49 @@ class TelemetryActor(Actor):
 
 async def loop(args):
     service_host_interface = f"{args.ip_address}:{args.port}"
+    master_refs: list[ActorRef] = []
+    print(f"Actors listening on: {service_host_interface}")
     # Create actor pool
-    async with await create_actor_pool(address="localhost:9777",
+    async with await create_actor_pool(address=service_host_interface,
                                        n_process=1) as pool:
+
+        if args.masters:
+            for master_address in args.masters:
+                master_ref = await xoscar.create_actor(MasterActor,
+                                                       address=master_address)
+                master_refs.append(master_ref)
+
         if args.is_master:
             # Create secondary master (optional)
-            secondary_master_ref = await xoscar.create_actor(
+            local_master = await xoscar.create_actor(
                 MasterActor,
                 address=service_host_interface,
-                uid="secondary_master_actor")
+                uid="local_master")
+            master_refs.append(local_master)
 
         # # Create primary master with Prometheus pushgateway and secondary master reference
         # master_ref = await xoscar.create_actor(
         #     MasterActor,
         #     prometheus_pushgateway=
         #     "prometheus_gateway:9091",  # Set to None if not using Prometheus
-        #     secondary_master_ref=secondary_master_ref,
+        #     secondary_master_ref=local_master,
         #     address="localhost:9777",
         #     uid="master_actor")
 
         if args.has_telemetry:
+            print(f"Master listening on: {service_host_interface}")
             # Create multiple telemetry workers
-            num_workers = 1
-            worker_refs = []
-            for _ in range(num_workers):
-                worker_ref = await xoscar.create_actor(
-                    TelemetryActor,
-                    secondary_master_ref,
-                    address=service_host_interface)
-                worker_refs.append(worker_ref)
+            worker_ref = await xoscar.create_actor(
+                TelemetryActor, master_refs, address=service_host_interface)
 
-            # Start telemetry collection in each worker
-            for worker_ref in worker_refs:
-                await worker_ref.run(interval=5.0)
+            await worker_ref.run(interval=5.0)
 
         # # Keep main running to observe results
         while True:
-            # all_data = await master_ref.get_all_telemetry()
+            if args.is_master:
+                all_data = await local_master.get_all_telemetry()
             # print("\nCurrent telemetry snapshot:", all_data)
-            time.sleep(interval)
+            time.sleep(5.0)
 
 
 class MastersAction(argparse.Action):
