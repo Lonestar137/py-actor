@@ -3,7 +3,7 @@ import xoscar
 import psutil
 import asyncio
 import argparse
-from xoscar import Actor, ActorRef, create_actor_pool
+from xoscar import Actor, ActorRef, create_actor_pool, context
 from typing import Dict, Any, Optional
 from prometheus_client import CollectorRegistry, Gauge, push_to_gateway
 
@@ -119,16 +119,29 @@ async def loop(args):
 
         if args.masters:
             for master_address in args.masters:
-                master_ref = await xoscar.create_actor(MasterActor,
-                                                       address=master_address)
+                master_ref = await xoscar.create_actor(
+                    MasterActor,
+                    prometheus_pushgateway=
+                    "prometheus_gateway:9091",  # Set to None if not using Prometheus
+                    address=master_address)
                 master_refs.append(master_ref)
 
         if args.is_master:
-            # Create secondary master (optional)
-            local_master = await xoscar.create_actor(
-                MasterActor,
-                address=service_host_interface,
-                uid="local_master")
+            if args.post_prom:
+                print("Prometheus configured")
+                local_master = await xoscar.create_actor(
+                    MasterActor,
+                    prometheus_pushgateway=
+                    "prometheus_gateway:9091",  # Set to None if not using Prometheus
+                    address=service_host_interface,
+                    uid="local_master")
+            else:
+                local_master = await xoscar.create_actor(
+                    MasterActor,
+                    address=service_host_interface,
+                    uid="local_master")
+            # print("DEBUG: ", local_master.telemetry_data)
+            # print("DEBUG: ", local_master.prometheus_pushgateway)
             master_refs.append(local_master)
 
         # # Create primary master with Prometheus pushgateway and secondary master reference
@@ -179,6 +192,10 @@ def main():
     role_group.add_argument("--has-telemetry",
                             action="store_true",
                             help="If set, spawns a telemetry actor here.")
+    role_group.add_argument(
+        "--post-prom",
+        default="localhost:9091",
+        help="IP Address of the Prometheus push gateway to publish to")
     role_group.add_argument("-i",
                             "--ip-address",
                             default="localhost",
